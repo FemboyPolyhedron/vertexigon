@@ -1,0 +1,14 @@
+{
+    "id": "deltarune:1",
+    "name": "Vanilla",
+    "packages": [
+        
+    ],
+    "deltarune": {
+        "menu": "./profile1_ch0",
+        "ch1": "./profile1_ch1",
+        "ch2": "./profile1_ch2",
+        "ch3": "./profile1_ch3",
+        "ch4": "./profile1_ch4"
+    }
+}

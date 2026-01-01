@@ -1,0 +1,18 @@
+{
+    "id": "deltarune:2",
+    "name": "30tbps",
+    "packages": [
+        {
+            "id": "30tbps",
+            "name": "30 Text Boxes Per Second",
+            "ver": "^0"
+        }
+    ],
+    "deltarune": {
+        "menu": "./profile2_ch0",
+        "ch1": "./profile2_ch1",
+        "ch2": "./profile2_ch2",
+        "ch3": "./profile2_ch3",
+        "ch4": "./profile2_ch4"
+    }
+}

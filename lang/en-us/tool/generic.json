@@ -1,0 +1,12 @@
+{
+    "h_tn": "vtg",
+    "h_td": "Vertexigon",
+    "h_ta": [
+        {
+            "a_n": "help",
+            "a_d": "Displays help information",
+            "a_t": "sub",
+            "a_r": false
+        }
+    ]
+}

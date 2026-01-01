@@ -1,0 +1,19 @@
+{
+    "vtxg": "C:/Program Files (x86)/Steam/steamapps/common/DELTARUNE/vtxg",
+    "pfpath":
+    {
+        "menu": "C:/Program Files (x86)/Steam/steamapps/common/DELTARUNE/profile",
+        "ch1": "C:/Program Files (x86)/Steam/steamapps/common/DELTARUNE/chapter1_windows/profile",
+        "ch2": "C:/Program Files (x86)/Steam/steamapps/common/DELTARUNE/chapter2_windows/profile",
+        "ch3": "C:/Program Files (x86)/Steam/steamapps/common/DELTARUNE/chapter3_windows/profile",
+        "ch4": "C:/Program Files (x86)/Steam/steamapps/common/DELTARUNE/chapter4_windows/profile"
+    },
+    "destpath":
+    {
+        "menu": "C:/Program Files (x86)/Steam/steamapps/common/DELTARUNE",
+        "ch1": "C:/Program Files (x86)/Steam/steamapps/common/DELTARUNE/chapter1_windows",
+        "ch2": "C:/Program Files (x86)/Steam/steamapps/common/DELTARUNE/chapter2_windows",
+        "ch3": "C:/Program Files (x86)/Steam/steamapps/common/DELTARUNE/chapter3_windows",
+        "ch4": "C:/Program Files (x86)/Steam/steamapps/common/DELTARUNE/chapter4_windows"
+    }
+}
