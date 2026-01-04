@@ -15,9 +15,15 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <regex.h>
+#include <dirent.h>
 #include "cJSON/cJSON.h"
 #include "inih/ini.h"
 #include "log.h"
+#include "obj.h"
+#include "lua/lua.h"
+#include "lua/lauxlib.h"
+#include "lua/lualib.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -29,6 +35,7 @@
 
 #include <string.h>
 
+/// @brief we hate inih
 int hndl_ini_alfa(void *user, const char *section, const char *name, const char *value)
 {
     char **out = user;
@@ -39,48 +46,9 @@ int hndl_ini_alfa(void *user, const char *section, const char *name, const char 
     return 1;
 }
 
-
-char* GET_APP_DIR()
-{
-    #ifdef _WIN32
-        char path[MAX_PATH];
-        char pathh[MAX_PATH];
-        HMODULE hModule = GetModuleHandle(NULL);
-        GetModuleFileName(hModule, path, MAX_PATH);
-        char *last_sep = strrchr(path, '\\');
-        char *last_sepFwd = strrchr(path, '/');
-        if (last_sep) {
-            *last_sep = '\0';
-        }
-        if (last_sepFwd) {
-            *last_sepFwd = '\0';
-        }
-        snprintf(pathh, MAX_PATH, "%s/../", path);
-    #else
-        char path[PATH_MAX];
-        char pathh[PATH_MAX];
-        readlink("/proc/self/exe", path, sizeof(path) - 1);
-        char *last_sep = strrchr(path, '\\');
-        char *last_sepFwd = strrchr(path, '/');
-        if (last_sep) {
-            *last_sep = '\0';
-        }
-        if (last_sepFwd) {
-            *last_sepFwd = '\0';
-        }
-        snprintf(pathh, PATH_MAX, "%s/../", path);
-    #endif
-
-    return strdup(pathh);
-}
-void GET_DIR(char *s)
-{
-    char *l = 0;
-    if (!s) return;
-    for (; *s; ++s) if (*s=='/'||*s=='\\') l=s;
-    if (l) l[1]=0; else *s=0;
-}
-
+/// @brief returns the current select profile of that game
+/// @param game that game
+/// @return select profile as a long
 long GET_PROFILE(char* game)
 {   
     char* app_dir = GET_APP_DIR();
@@ -159,6 +127,10 @@ long GET_PROFILE(char* game)
     return profile;
 }
 
+/// @brief get the profile data as a cjson
+/// @param game the game
+/// @param profile profile id
+/// @return cjson data
 cJSON* GET_PROFILE_DATA(char* game, long profile)
 {   
     char* app_dir = GET_APP_DIR();
@@ -230,7 +202,9 @@ cJSON* GET_PROFILE_DATA(char* game, long profile)
         cJSON_Delete(games);
         free(buf);
         free(app_dir);
-        LOG_ERR("profile", "file_not_found", "could not find critical meta file /game/games.json");
+        char msg[24] = "";
+        snprintf(msg, sizeof(msg), "could not find profile%ld", profile);
+        LOG_ERR("profile", "file_not_found", msg);
         return NULL;
     }
 
@@ -259,6 +233,123 @@ cJSON* GET_PROFILE_DATA(char* game, long profile)
     return data;
 }
 
+/// @brief returns a pointer of profiles, with the size of the pointer prefixed
+/// @param game (you lost) the game
+/// @return all valid profile ids of that game
+long* GET_PROFILES(char* game)
+{
+    char* app_dir = GET_APP_DIR();
+    char games_path[MAX_PATH];
+    char profile_path[MAX_PATH];
+    char games_meta_path[MAX_PATH];
+
+    snprintf(games_meta_path, MAX_PATH, "%sgame/games.json", app_dir);
+
+    FILE *file = fopen(games_meta_path, "rb");
+
+    if (!file) {
+        LOG_ERR("profile", "file_not_found", "could not find critical meta file /game/games.json");
+        return NULL;
+    }
+
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    char *buf = malloc(file_size + 1);
+    
+    if (fread(buf, 1, file_size, file) != (size_t)file_size) {
+        fclose(file);
+        free(buf);
+        free(app_dir);
+        return NULL;
+    }
+    buf[file_size] = '\0';
+    fclose(file);
+
+    cJSON *games = cJSON_Parse(buf);
+    if (!games) { free(buf); free(app_dir); LOG_ERR("profile", "cjson_parse_err", "error while parsing /game/games.json"); return NULL; }
+
+    cJSON *pro = cJSON_GetObjectItemCaseSensitive(games, game);
+
+    if (!pro) {
+        char *msg = malloc(snprintf(NULL, 0, "could not find game %s", game) + 1);
+        snprintf(msg, snprintf(NULL, 0, "could not find game %s", game) + 1, "could not find game %s", game);
+        LOG_ERR("profile", "missing_entry", msg);
+        cJSON_Delete(games);
+        free(buf);
+        free(app_dir);
+        free(msg);
+        return NULL;
+    }
+
+    if (!cJSON_IsString(cJSON_GetObjectItemCaseSensitive(pro, "id")) || strcmp(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(pro, "id")), game) != 0)
+    {
+        char *msg = malloc(snprintf(NULL, 0, "could not find game %s", game) + 1);
+        snprintf(msg, snprintf(NULL, 0, "could not find game %s", game) + 1, "could not find game %s", game);
+        LOG_ERR("profile", "invalid_data", msg);
+        cJSON_Delete(games);
+        free(buf);
+        free(app_dir);
+        free(msg);
+        return NULL;
+    }
+
+    strcpy(games_path, games_meta_path);
+    GET_DIR(games_path);
+
+    snprintf(profile_path, MAX_PATH, "%s%s/profile", games_path, cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(pro, "data")));
+
+    regex_t reg;
+    regcomp(&reg, "^profile[0-9]+$", 0);
+
+    DIR *dir = opendir(profile_path);
+    if (!dir) return NULL;
+
+    struct dirent *ent;
+    long *profiles = NULL;
+    size_t mrrp = 0;
+
+    while ((ent = readdir(dir))) {
+        if (regexec(&reg, ent->d_name, 1, NULL, 0) != 0) { continue; }
+
+        long id = strtol(ent->d_name + 7, NULL, 10);
+
+        char *tmp = realloc(profiles, (mrrp + 1) * sizeof *profiles);
+        if (!tmp) break;
+        profiles = tmp;
+        
+        profiles[mrrp + 1] = id;
+        mrrp++;
+    }
+
+    profiles[0] = (long)mrrp;
+
+    closedir(dir);
+    return profiles;
+}
+
+/// @brief check if that profile id exists for that game
+/// @param game that game
+/// @param profile profile id
+/// @return Boolean
+int PROFILE_EXISTS(char* game, long profile)
+{
+    long* profiles = GET_PROFILES(game);
+    for(int i = 0; i < profiles[0]; i++)
+    {
+        if(profiles[i + 1] == profile)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/// @brief sets the current profile of that game to that id
+/// @param game that game
+/// @param profile profile id
+/// @return 0 if success and error code if fail
 int SET_PROFILE(char* game, long profile)
 {
     char* app_dir = GET_APP_DIR();
@@ -280,8 +371,6 @@ int SET_PROFILE(char* game, long profile)
 
     char line[512];
     int found = 0;
-
-    /* ---- load games.json ---- */
 
     snprintf(games_meta_path, MAX_PATH, "%s/game/games.json", app_dir);
 
@@ -309,12 +398,7 @@ int SET_PROFILE(char* game, long profile)
         LOG_FATAL("profile", "missing_entry", "could not find game");
     }
 
-    /* ---- game root ---- */
-
     snprintf(game_root, MAX_PATH, "%s/game/%s", app_dir, game);
-
-    /* ---- update ini ---- */
-
     snprintf(ini_path, MAX_PATH, "%s/%s.ini", game_root, game);
     snprintf(tmp_path, MAX_PATH, "%s/%s.ini.tmp", game_root, game);
 
@@ -344,14 +428,10 @@ int SET_PROFILE(char* game, long profile)
     remove(ini_path);
     rename(tmp_path, ini_path);
 
-    /* ---- load profile JSON ---- */
-
     cJSON *profile_json = GET_PROFILE_DATA(game, profile);
     if (!profile_json) {
         LOG_FATAL("profile", "profile_load_fail", "could not load profile json");
     }
-
-    /* ---- load dat json ---- */
 
     cJSON *data_item = cJSON_GetObjectItemCaseSensitive(pro, "data");
     if (!cJSON_IsString(data_item)) {
@@ -395,13 +475,9 @@ int SET_PROFILE(char* game, long profile)
         LOG_FATAL("profile", "invalid_profile", "pfpath/destpath/game map missing");
     }
 
-    /* ---- profile base dir ---- */
-
     char profile_base[MAX_PATH];
     snprintf(profile_base, MAX_PATH, "%s/profile/profile%ld", game_root, profile);
     GET_DIR(profile_base);
-
-    /* ---- apply per chapter ---- */
 
     cJSON *it;
     cJSON_ArrayForEach(it, game_map)
@@ -416,8 +492,6 @@ int SET_PROFILE(char* game, long profile)
 
         if (!cJSON_IsString(pfroot) || !cJSON_IsString(dstroot))
             continue;
-
-        /* ---- open plaintext profileX_chY ---- */
 
         char prof_ch_file[MAX_PATH];
         snprintf(
@@ -463,15 +537,11 @@ int SET_PROFILE(char* game, long profile)
             continue;
         }
 
-        /* extract only arg0 (base .win path) */
         char *rel = malloc(path_len + 1);
         memcpy(rel, raw, path_len);
         rel[path_len] = '\0';
 
         free(raw);
-
-
-        /* ---- build source .win path ---- */
 
         char src_data[MAX_PATH];
         snprintf(
@@ -484,7 +554,6 @@ int SET_PROFILE(char* game, long profile)
 
         free(rel);
 
-        /* ---- delete any existing *.win in destination ---- */
 
         WIN32_FIND_DATAA fd;
         char find_pat[MAX_PATH];
@@ -515,8 +584,6 @@ int SET_PROFILE(char* game, long profile)
 
             FindClose(h);
         }
-
-        /* ---- destination filename = source filename ---- */
 
         const char *fname = strrchr(src_data, '/');
         if (!fname)
@@ -558,5 +625,135 @@ int SET_PROFILE(char* game, long profile)
     free(app_dir);
 
     LOG_INFOF("profile set to %ld", profile);
+    return 0;
+}
+
+// some shit
+
+static cJSON *PROFILE_BUILD = NULL;
+static char   PROFILE_GAME[64];
+static long   PROFILE_ID = -1;
+
+static int LUA_NEW_PROFOLDER(lua_State *L)
+{
+    const char *scope   = luaL_checkstring(L, 1);
+    const char *chapter = luaL_checkstring(L, 2);
+    const char *name    = luaL_checkstring(L, 3);
+
+    LOG_INFOF("lua:new_profolder %s %s %s", scope, chapter, name);
+
+    return 0;
+}
+
+static int LUA_NEW_PROFILE_MAIN(lua_State *L)
+{
+    const char *name = luaL_checkstring(L, 1);
+    long id          = luaL_checkinteger(L, 2);
+
+    PROFILE_ID = id;
+
+    PROFILE_BUILD = cJSON_CreateObject();
+    if (!PROFILE_BUILD) { luaL_error(L, "cjson alloc failed"); }
+
+    char idbuf[64];
+    snprintf(idbuf, sizeof(idbuf), "%s:%ld", PROFILE_GAME, id);
+
+    cJSON_AddStringToObject(PROFILE_BUILD, "id", idbuf);
+    cJSON_AddStringToObject(PROFILE_BUILD, "name", name);
+    cJSON_AddArrayToObject(PROFILE_BUILD, "packages");
+
+    cJSON *game = cJSON_CreateObject();
+    cJSON_AddItemToObject(PROFILE_BUILD, PROFILE_GAME, game);
+
+    return 0;
+}
+
+static int LUA_NEW_PROFILE_DATA(lua_State *L)
+{
+    const char *pfname  = luaL_checkstring(L, 1);
+    const char *chapter = luaL_checkstring(L, 2);
+
+    if (!PROFILE_BUILD) { luaL_error(L, "profile not initialized"); }
+
+    cJSON *game = cJSON_GetObjectItemCaseSensitive(PROFILE_BUILD, PROFILE_GAME);
+    if (!game) { luaL_error(L, "game object missing"); }
+
+    char rel[128];
+    snprintf(rel, sizeof(rel), "./%s", pfname);
+
+    cJSON_AddStringToObject(game, chapter, rel);
+    return 0;
+}
+
+static int RUN_PROFILE_LUA(char *game, long id)
+{
+    lua_State *L = luaL_newstate();
+    if (!L) { LOG_FATAL("lua", "alloc_fail", "lua state alloc failed"); }
+
+    luaL_openlibs(L);
+
+    memset(PROFILE_GAME, 0, sizeof(PROFILE_GAME));
+    strncpy(PROFILE_GAME, game, sizeof(PROFILE_GAME) - 1);
+
+    PROFILE_BUILD = NULL;
+    PROFILE_ID    = id;
+
+    lua_register(L, "new_profolder",    LUA_NEW_PROFOLDER);
+    lua_register(L, "new_profile_main", LUA_NEW_PROFILE_MAIN);
+    lua_register(L, "new_profile_data", LUA_NEW_PROFILE_DATA);
+
+    if (luaL_dofile(L, "profile.lua") != LUA_OK)
+        LOG_FATAL("lua", "load_fail", lua_tostring(L, -1));
+
+    lua_getglobal(L, "_profile_create");
+    if (!lua_isfunction(L, -1))
+        LOG_FATAL("lua", "missing_entry", "_profile_create not found");
+
+    lua_pushstring(L, "profile");
+    lua_pushinteger(L, id);
+
+    if (lua_pcall(L, 2, 0, 0) != LUA_OK)
+        LOG_FATAL("lua", "runtime_error", lua_tostring(L, -1));
+
+    lua_close(L);
+    return 0;
+}
+
+/// @brief makes a new profile
+/// @param game game to make profile on
+/// @param id the id of the new profile
+/// @return error code
+int NEW_PROFILE(char* game, long id)
+{
+    if(PROFILE_EXISTS(game, id)) { LOG_FATAL("profile", "already_exists", "failed to create profile, profile already exists"); return -1; }
+
+    LOG_INFOF("creating profile for %s with id %s:%ld", game, game, id);
+
+    RUN_PROFILE_LUA(game, id);
+
+    if (!PROFILE_BUILD) { LOG_FATAL("profile", "build_fail", "profile json not created"); }
+
+    char *out = cJSON_Print(PROFILE_BUILD);
+    if (!out) { LOG_FATAL("profile", "json_fail", "cjson print failed"); }
+
+    char *app_dir = GET_APP_DIR();
+    char path[MAX_PATH];
+
+    snprintf(path, MAX_PATH, "%s/game/%s/profile/profile%ld", app_dir, game, id);
+
+    FILE *f = fopen(path, "w");
+    if (!f) { LOG_FATAL("profile", "file_open_fail", path); }
+
+    fputs(out, f);
+    fclose(f);
+
+    free(out);
+    cJSON_Delete(PROFILE_BUILD);
+    free(app_dir);
+
+    PROFILE_BUILD = NULL;
+    PROFILE_ID    = -1;
+
+    LOG_INFOF("profile %s:%ld created", game, id);
     return 0;
 }

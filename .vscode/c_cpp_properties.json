@@ -1,0 +1,21 @@
+{
+  "configurations": [
+    {
+      "name": "UCRT64",
+      "compilerPath": "C:/msys64/ucrt64/bin/gcc.exe",
+      "intelliSenseMode": "windows-gcc-x64",
+      "cStandard": "c17",
+      "cppStandard": "c++20",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "C:/msys64/ucrt64/include",
+        "C:/msys64/ucrt64/x86_64-w64-mingw32/include"
+      ],
+      "defines": [
+        "__MSYS__",
+        "__MINGW64__"
+      ]
+    }
+  ],
+  "version": 4
+}

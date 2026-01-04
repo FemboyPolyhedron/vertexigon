@@ -1,4 +1,7 @@
 all rights reserved do not disribute or copy or modify
 
+the below repo's code has been used in this repo that that code only is licesned under MIT:
 this repo contains and uses cjson code from https://github.com/DaveGamble/cJSON
-this repo contains and uses inih code from https://github.com/benhoyt/inih
+this repo contains and uses inih code from https://github.com/benhoyt/inih 
+this repo contains and uses c lua code from https://github.com/lua/lua
+

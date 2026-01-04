@@ -14,7 +14,7 @@ void LOG_CTRL(const char *action, const char *value);
 /**
  * @brief Logs an error message
  * @param action The action which was being performed when the error occurred
- * @param value Description/message associated with the error (heavily discouraged from multiline)
+ * @param value Name of the error (heavily discouraged from multiline)
  * @param msg The actual message (multiline)
  */
 void LOG_ERR(const char *action, const char *value, const char *msg);
@@ -32,9 +32,9 @@ void LOG_WARN(const char *value);
 void LOG_INFO(const char *value);
 
 /**
- * @brief Logs a printf-formatted info message
- * @param format The message format
- * @param ... Additional arguments
+ * @brief Logs a info message as a format, or use snprintf + LOG_INFO
+ * @param format format
+ * @param ... format
  */
 void LOG_INFOF(const char *format, ...);
 
@@ -46,15 +46,15 @@ void LOG_YAY(const char *value);
 
 /**
  * @brief Generic logging
- * @param who The 4-char author identifier
+ * @param who The 4-char author identifier ( do not exceed 4 chars )
  * @param value The message
  */
 void LOG(const char *who, const char *value);
 
 /**
  * @brief Confuses dev
- * @param action 
- * @param value Description/message of the fatal error (heavily discouraged from multiline)
+ * @param action thread/action being performed when fatal happened
+ * @param value The name of the fatal error (heavily discouraged from multiline)
  * @param msg The actual message (multiline)
  */
 void LOG_FATAL(const char *action, const char *value, const char *msg);
